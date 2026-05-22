@@ -4,35 +4,50 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/yourorg/envcrypt/internal/vault"
+	"github.com/yourusername/envcrypt/internal/config"
+	"github.com/yourusername/envcrypt/internal/vault"
 )
 
 func newUnlockCmd() *cobra.Command {
-	var envPath string
-	var vaultPath string
-	var keyPath string
+	var (
+		vaultPath string
+		envPath   string
+		keyPath   string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "unlock",
-		Short: "Decrypt the vault into a .env file",
+		Short: "Decrypt the vault and restore the .env file",
+		Long: `Decrypt the encrypted vault file using your age identity key
+and write the plaintext variables back to the .env file.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			v, err := vault.Open(vaultPath)
+			cfg, err := config.LoadOrDefault("")
 			if err != nil {
-				return fmt.Errorf("open vault: %w", err)
+				return fmt.Errorf("load config: %w", err)
 			}
 
-			if err := v.Unlock(envPath, keyPath); err != nil {
-				return fmt.Errorf("unlock failed: %w", err)
+			if vaultPath == "" {
+				vaultPath = cfg.VaultFile
+			}
+			if envPath == "" {
+				envPath = cfg.EnvFile
+			}
+			if keyPath == "" {
+				keyPath = cfg.IdentityFile
 			}
 
-			fmt.Printf("Unlocked %s → %s\n", vaultPath, envPath)
+			if err := vault.Unlock(vaultPath, envPath, keyPath); err != nil {
+				return fmt.Errorf("unlock: %w", err)
+			}
+
+			fmt.Printf("Unlocked: %s → %s\n", vaultPath, envPath)
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVarP(&envPath, "env", "e", ".env", "Output path for decrypted .env file")
-	cmd.Flags().StringVarP(&vaultPath, "vault", "v", ".env.age", "Path to vault file")
-	cmd.Flags().StringVarP(&keyPath, "key", "k", "", "Path to age identity key file (default: ~/.config/envcrypt/key.age)")
+	cmd.Flags().StringVar(&vaultPath, "vault", "", "path to encrypted vault file (default from config)")
+	cmd.Flags().StringVar(&envPath, "env", "", "path to output .env file (default from config)")
+	cmd.Flags().StringVar(&keyPath, "key", "", "path to age identity key file (default from config)")
 
 	return cmd
 }
