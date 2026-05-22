@@ -4,6 +4,7 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -30,6 +31,23 @@ func Default() *Config {
 		EnvFile:        ".env",
 		EncryptedFile:  ".env.age",
 	}
+}
+
+// Validate checks that all required fields in the Config are non-empty.
+func (c *Config) Validate() error {
+	if c.KeyFile == "" {
+		return fmt.Errorf("config: key_file must not be empty")
+	}
+	if c.RecipientsFile == "" {
+		return fmt.Errorf("config: recipients_file must not be empty")
+	}
+	if c.EnvFile == "" {
+		return fmt.Errorf("config: env_file must not be empty")
+	}
+	if c.EncryptedFile == "" {
+		return fmt.Errorf("config: encrypted_file must not be empty")
+	}
+	return nil
 }
 
 // Save writes the config as JSON to the given path.
