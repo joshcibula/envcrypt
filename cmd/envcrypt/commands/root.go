@@ -4,27 +4,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var rootCmd *cobra.Command
+// Root is the top-level cobra command for envcrypt.
+var Root = &cobra.Command{
+	Use:   "envcrypt",
+	Short: "Lightweight .env file encryption and sharing tool",
+	Long: `envcrypt encrypts your .env files with age encryption so they can be
+safely committed to version control or shared with team members.
 
-// Root returns the root cobra command for envcrypt.
-func Root() *cobra.Command {
-	if rootCmd != nil {
-		return rootCmd
-	}
+Use 'envcrypt init' to create an encrypted vault from an existing .env file,
+'envcrypt lock' to re-encrypt after editing, 'envcrypt unlock' to decrypt for
+local use, 'envcrypt share' to add recipients, and 'envcrypt rotate' to cycle
+the encryption key.`,
+}
 
-	rootCmd = &cobra.Command{
-		Use:   "envcrypt",
-		Short: "Lightweight .env file encryption and sharing tool",
-		Long: `envcrypt encrypts and decrypts .env files using age encryption.
-
-Use it to safely store and share environment secrets with teammates.`,
-		SilenceUsage:  true,
-		SilenceErrors: true,
-	}
-
-	rootCmd.AddCommand(newInitCmd())
-	rootCmd.AddCommand(newLockCmd())
-	rootCmd.AddCommand(newUnlockCmd())
-
-	return rootCmd
+func init() {
+	Root.AddCommand(
+		newInitCmd(),
+		newLockCmd(),
+		newUnlockCmd(),
+		newShareCmd(),
+		newRotateCmd(),
+	)
 }

@@ -2,49 +2,42 @@ package vault
 
 import (
 	"fmt"
-	"os"
 
-	"github.com/user/envcrypt/internal/crypto"
-	"github.com/user/envcrypt/internal/keystore"
+	"github.com/nicholasgasior/envcrypt/internal/config"
+	"github.com/nicholasgasior/envcrypt/internal/crypto"
+	"github.com/nicholasgasior/envcrypt/internal/keystore"
 )
 
 // Rotate generates a new key pair, re-encrypts the vault with the new key,
-// and replaces the old key on disk.
-func Rotate(vaultPath, keyPath string) error {
-	// Load existing identity to decrypt current vault
-	oldIdentity, err := keystore.Load(keyPath)
+// and replaces the old key on disk. The old identity is used to decrypt the
+// current vault before re-encrypting with the freshly generated identity.
+func Rotate(cfg *config.Config) error {
+	// Load the existing identity so we can decrypt the current vault.
+	oldIdentity, err := keystore.Load(cfg.KeyFile)
 	if err != nil {
-		return fmt.Errorf("rotate: load existing key: %w", err)
+		return fmt.Errorf("rotate: load old key: %w", err)
 	}
 
-	// Decrypt vault contents with old key
-	plaintext, err := crypto.DecryptFile(vaultPath, oldIdentity)
+	// Decrypt the current vault into a temporary buffer.
+	plaintext, err := crypto.DecryptFile(cfg.VaultFile, oldIdentity)
 	if err != nil {
 		return fmt.Errorf("rotate: decrypt vault: %w", err)
 	}
 
-	// Generate new identity
+	// Generate a fresh identity.
 	newIdentity, err := keystore.Generate()
 	if err != nil {
 		return fmt.Errorf("rotate: generate new key: %w", err)
 	}
 
-	// Write new vault encrypted with new key
-	tmpVault := vaultPath + ".tmp"
+	// Re-encrypt the plaintext with the new identity's public key.
 	recipient := newIdentity.Recipient()
-	if err := crypto.EncryptFile(tmpVault, plaintext, recipient); err != nil {
-		_ = os.Remove(tmpVault)
-		return fmt.Errorf("rotate: encrypt vault with new key: %w", err)
+	if err := crypto.EncryptFile(cfg.VaultFile, plaintext, recipient); err != nil {
+		return fmt.Errorf("rotate: re-encrypt vault: %w", err)
 	}
 
-	// Atomically replace old vault
-	if err := os.Rename(tmpVault, vaultPath); err != nil {
-		_ = os.Remove(tmpVault)
-		return fmt.Errorf("rotate: replace vault file: %w", err)
-	}
-
-	// Persist new key, overwriting old one
-	if err := keystore.Save(newIdentity, keyPath); err != nil {
+	// Persist the new identity, overwriting the old key file.
+	if err := keystore.Save(cfg.KeyFile, newIdentity); err != nil {
 		return fmt.Errorf("rotate: save new key: %w", err)
 	}
 

@@ -5,67 +5,77 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/user/envcrypt/internal/keystore"
-	"github.com/user/envcrypt/internal/vault"
+	"github.com/nicholasgasior/envcrypt/internal/config"
+	"github.com/nicholasgasior/envcrypt/internal/keystore"
+	"github.com/nicholasgasior/envcrypt/internal/vault"
 )
 
 func TestRotateReplacesKey(t *testing.T) {
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, ".env")
-	vaultPath := filepath.Join(dir, ".env.age")
+	vaultPath := filepath.Join(dir, "vault.age")
 	keyPath := filepath.Join(dir, "key.txt")
 
-	// Write a sample .env file and initialise vault
-	if err := os.WriteFile(envPath, []byte("SECRET=hello\nTOKEN=world\n"), 0600); err != nil {
-		t.Fatalf("write env: %v", err)
-	}
-	if err := vault.Init(envPath, vaultPath, keyPath, false); err != nil {
-		t.Fatalf("init: %v", err)
+	// Write a minimal .env file.
+	if err := os.WriteFile(envPath, []byte("SECRET=hello\n"), 0600); err != nil {
+		t.Fatal(err)
 	}
 
-	// Capture original public key
-	origIdentity, err := keystore.Load(keyPath)
+	cfg := &config.Config{
+		VaultFile: vaultPath,
+		KeyFile:   keyPath,
+	}
+
+	// Initialise the vault so there is something to rotate.
+	if err := vault.Init(cfg, envPath, false); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	// Capture the public key before rotation.
+	oldIdentity, err := keystore.Load(keyPath)
 	if err != nil {
-		t.Fatalf("load original key: %v", err)
+		t.Fatalf("load old identity: %v", err)
 	}
-	origPub := origIdentity.Recipient().String()
+	oldPub := oldIdentity.Recipient().String()
 
-	// Rotate
-	if err := vault.Rotate(vaultPath, keyPath); err != nil {
-		t.Fatalf("rotate: %v", err)
+	// Rotate.
+	if err := vault.Rotate(cfg); err != nil {
+		t.Fatalf("Rotate: %v", err)
 	}
 
-	// New key should differ from original
+	// The key file must now contain a different public key.
 	newIdentity, err := keystore.Load(keyPath)
 	if err != nil {
-		t.Fatalf("load new key: %v", err)
+		t.Fatalf("load new identity: %v", err)
 	}
 	newPub := newIdentity.Recipient().String()
-	if origPub == newPub {
-		t.Error("expected new public key after rotate, got same key")
+
+	if oldPub == newPub {
+		t.Error("expected public key to change after rotation, but it did not")
 	}
 
-	// Vault should still be decryptable with new key
-	if _, err := vault.Open(vaultPath, keyPath); err != nil {
-		t.Fatalf("open after rotate: %v", err)
+	// The vault must still be openable with the new key.
+	env, err := vault.Open(cfg)
+	if err != nil {
+		t.Fatalf("Open after rotate: %v", err)
+	}
+	if env["SECRET"] != "hello" {
+		t.Errorf("expected SECRET=hello, got %q", env["SECRET"])
 	}
 }
 
 func TestRotateMissingVault(t *testing.T) {
 	dir := t.TempDir()
-	vaultPath := filepath.Join(dir, "missing.age")
-	keyPath := filepath.Join(dir, "key.txt")
-
-	// Generate a key so Load succeeds but vault is absent
-	identity, err := keystore.Generate()
-	if err != nil {
-		t.Fatalf("generate: %v", err)
-	}
-	if err := keystore.Save(identity, keyPath); err != nil {
-		t.Fatalf("save key: %v", err)
+	cfg := &config.Config{
+		VaultFile: filepath.Join(dir, "nonexistent.age"),
+		KeyFile:   filepath.Join(dir, "key.txt"),
 	}
 
-	if err := vault.Rotate(vaultPath, keyPath); err == nil {
-		t.Fatal("expected error rotating missing vault, got nil")
+	// Generate a key so the load step does not fail first.
+	id, _ := keystore.Generate()
+	_ = keystore.Save(cfg.KeyFile, id)
+
+	if err := vault.Rotate(cfg); err == nil {
+		t.Error("expected error rotating missing vault, got nil")
 	}
 }
