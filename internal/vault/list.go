@@ -15,6 +15,11 @@ type ListResult struct {
 	Keys []string
 }
 
+// Count returns the number of keys in the vault.
+func (r *ListResult) Count() int {
+	return len(r.Keys)
+}
+
 // List decrypts the vault and returns the list of environment variable keys
 // without exposing their values.
 func List(vaultPath string) (*ListResult, error) {
