@@ -61,3 +61,20 @@ func TestLoadMissingFile(t *testing.T) {
 		t.Fatal("expected error for missing key file, got nil")
 	}
 }
+
+func TestGenerateUniqueKeys(t *testing.T) {
+	kp1, err := keystore.Generate()
+	if err != nil {
+		t.Fatalf("Generate() error: %v", err)
+	}
+	kp2, err := keystore.Generate()
+	if err != nil {
+		t.Fatalf("Generate() error: %v", err)
+	}
+	if kp1.Identity.String() == kp2.Identity.String() {
+		t.Error("expected two generated identities to be unique")
+	}
+	if kp1.Recipient.String() == kp2.Recipient.String() {
+		t.Error("expected two generated recipients to be unique")
+	}
+}
