@@ -5,36 +5,45 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/yourusername/envcrypt/internal/crypto"
-	"github.com/yourusername/envcrypt/internal/envfile"
-	"github.com/yourusername/envcrypt/internal/keystore"
+	"github.com/nicholasgasior/envcrypt/internal/config"
+	"github.com/nicholasgasior/envcrypt/internal/crypto"
+	"github.com/nicholasgasior/envcrypt/internal/keystore"
 )
 
-// Unlock decrypts the vault file and writes the plaintext .env file to disk.
-// It loads the identity from the keystore, decrypts the vault, and writes
-// the result to the configured env file path.
-func Unlock(vaultPath, envPath, keyPath string) error {
-	identity, err := keystore.Load(keyPath)
+// UnlockOptions holds optional overrides for the Unlock operation.
+type UnlockOptions struct {
+	// OutputFile overrides the destination .env path from config.
+	OutputFile string
+}
+
+// Unlock decrypts the vault file and writes the plaintext .env to disk.
+func Unlock(cfg *config.Config, opts UnlockOptions) error {
+	identity, err := keystore.Load(cfg.IdentityFile)
 	if err != nil {
-		return fmt.Errorf("unlock: load identity: %w", err)
+		return fmt.Errorf("load identity: %w", err)
 	}
 
+	vaultPath := cfg.VaultFile
 	if _, err := os.Stat(vaultPath); os.IsNotExist(err) {
-		return fmt.Errorf("unlock: vault file not found: %s", vaultPath)
+		return fmt.Errorf("vault file not found: %s", vaultPath)
 	}
 
-	envVars, err := crypto.DecryptFile(vaultPath, identity)
+	plaintext, err := crypto.DecryptFile(vaultPath, identity)
 	if err != nil {
-		return fmt.Errorf("unlock: decrypt vault: %w", err)
+		return fmt.Errorf("decrypt vault: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(envPath), 0o755); err != nil {
-		return fmt.Errorf("unlock: create env dir: %w", err)
+	dest := cfg.EnvFile
+	if opts.OutputFile != "" {
+		dest = opts.OutputFile
 	}
 
-	contents := envfile.Serialize(envVars)
-	if err := os.WriteFile(envPath, []byte(contents), 0o600); err != nil {
-		return fmt.Errorf("unlock: write env file: %w", err)
+	if err := os.MkdirAll(filepath.Dir(dest), 0700); err != nil {
+		return fmt.Errorf("create output directory: %w", err)
+	}
+
+	if err := os.WriteFile(dest, plaintext, 0600); err != nil {
+		return fmt.Errorf("write env file: %w", err)
 	}
 
 	return nil

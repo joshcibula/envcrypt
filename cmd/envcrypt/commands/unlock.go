@@ -3,51 +3,51 @@ package commands
 import (
 	"fmt"
 
+	"github.com/nicholasgasior/envcrypt/internal/config"
+	"github.com/nicholasgasior/envcrypt/internal/vault"
 	"github.com/spf13/cobra"
-	"github.com/yourusername/envcrypt/internal/config"
-	"github.com/yourusername/envcrypt/internal/vault"
 )
 
 func newUnlockCmd() *cobra.Command {
-	var (
-		vaultPath string
-		envPath   string
-		keyPath   string
-	)
+	var cfgPath string
+	var outputFile string
 
 	cmd := &cobra.Command{
 		Use:   "unlock",
-		Short: "Decrypt the vault and restore the .env file",
-		Long: `Decrypt the encrypted vault file using your age identity key
-and write the plaintext variables back to the .env file.`,
+		Short: "Decrypt the vault and write the .env file",
+		Long: `Decrypt the vault file using the local age identity and write the
+plaintext environment variables to the configured .env file (or a custom path).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.LoadOrDefault("")
+			var cfg *config.Config
+			var err error
+			if cfgPath != "" {
+				cfg, err = config.Load(cfgPath)
+			} else {
+				cfg, err = config.LoadOrDefault("")
+			}
 			if err != nil {
 				return fmt.Errorf("load config: %w", err)
 			}
 
-			if vaultPath == "" {
-				vaultPath = cfg.VaultFile
-			}
-			if envPath == "" {
-				envPath = cfg.EnvFile
-			}
-			if keyPath == "" {
-				keyPath = cfg.IdentityFile
+			opts := vault.UnlockOptions{
+				OutputFile: outputFile,
 			}
 
-			if err := vault.Unlock(vaultPath, envPath, keyPath); err != nil {
+			if err := vault.Unlock(cfg, opts); err != nil {
 				return fmt.Errorf("unlock: %w", err)
 			}
 
-			fmt.Printf("Unlocked: %s → %s\n", vaultPath, envPath)
+			dest := cfg.EnvFile
+			if outputFile != "" {
+				dest = outputFile
+			}
+			fmt.Printf("Vault decrypted → %s\n", dest)
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVar(&vaultPath, "vault", "", "path to encrypted vault file (default from config)")
-	cmd.Flags().StringVar(&envPath, "env", "", "path to output .env file (default from config)")
-	cmd.Flags().StringVar(&keyPath, "key", "", "path to age identity key file (default from config)")
+	cmd.Flags().StringVar(&cfgPath, "config", "", "Path to envcrypt config file (default: .envcrypt.yaml)")
+	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Write decrypted .env to this path instead of the configured default")
 
 	return cmd
 }
